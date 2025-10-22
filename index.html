@@ -61,25 +61,25 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Firebase SDKs (Storage SDK is removed) -->
+    <!-- Firebase SDKs (ALL IMPORTS are now added to the window object for Babel access) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import {
-            getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {
-            getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import * as auth from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import * as firestore from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Expose Firebase modules globally for the Babel script to use
         window.firebase = {
-            initializeApp, getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
-            getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
+            initializeApp,
+            auth: auth,
+            firestore: firestore,
         };
 
-        // This script tag acts as a signal that Firebase modules are loaded
-        const event = new CustomEvent('firebase-loaded');
-        window.dispatchEvent(event);
+        // This is a safety check: expose all needed functions globally
+        Object.assign(window.firebase, auth);
+        Object.assign(window.firebase, firestore);
+
+        // This is the cleanest way to signal that the module imports are complete
+        window.FIREBASE_MODULES_LOADED = true;
     </script>
 
 
@@ -186,8 +186,16 @@
             // ------------------------------------
 
             useEffect(() => {
-                // Wait for Firebase SDKs to load before attempting to initialize
+                // Check if modules are loaded before initialization
+                if (!window.FIREBASE_MODULES_LOADED) {
+                    // Should not happen in this setup, but good for safety
+                    console.error("Firebase module imports are not yet available.");
+                    setLoading(true);
+                    return;
+                }
+
                 const initializeFirebase = async () => {
+                    // Destructure directly from window.firebase
                     const { initializeApp, getFirestore, getAuth, onAuthStateChanged } = window.firebase;
 
                     try {
@@ -204,11 +212,11 @@
                         onAuthStateChanged(firebaseAuth, (user) => {
                             if (user) {
                                 setUserId(user.uid);
-                                setUserEmail(user.email); // <-- NEW: Capture user email
+                                setUserEmail(user.email); // Capture user email
                                 setError(null); // Clear errors on successful sign-in
                             } else {
                                 setUserId(null); // User is logged out
-                                setUserEmail(null); // <-- NEW: Clear user email
+                                setUserEmail(null); // Clear user email
                             }
                             setLoading(false);
                         });
@@ -219,16 +227,8 @@
                     }
                 };
 
-                if (window.firebase) {
-                    initializeFirebase();
-                } else {
-                    window.addEventListener('firebase-loaded', initializeFirebase, { once: true });
-                }
-
-                return () => {
-                    window.removeEventListener('firebase-loaded', initializeFirebase);
-                };
-            }, []);
+                initializeFirebase();
+            }, []); // Only runs once after component mounts
 
             // Sign In Function
             const handleGoogleSignIn = async () => {
@@ -249,6 +249,8 @@
                     // Check if the error is auth/operation-not-allowed, which means Google sign-in isn't enabled
                     if (error.code && error.code.includes('auth/operation-not-allowed')) {
                         setError("Google Sign-in failed. Please ensure **Google Sign-in** is enabled in your Firebase Console (Authentication -> Sign-in method).");
+                    } else if (error.code && error.code.includes('auth/unauthorized-domain')) {
+                        setError("Google Sign-in failed. Please check your **Firebase Project Settings -> Authorized domains** and add your Vercel URL (e.g., fabric-stock-manager.vercel.app).");
                     } else {
                         setError("Sign-in failed. Please try again.");
                     }
@@ -261,7 +263,7 @@
                 try {
                     await auth.signOut();
                     setUserId(null); // Force log out
-                    setUserEmail(null); // <-- NEW: Clear email on sign out
+                    setUserEmail(null); // Clear email on sign out
                     setFabrics([]); // Clear the data
                     setError(null);
                 } catch (e) {
@@ -277,7 +279,7 @@
             useEffect(() => {
                 if (!db || !userId) return;
 
-                const { collection, query, onSnapshot } = window.firebase;
+                const { collection, query, onSnapshot } = window.firebase.firestore;
 
                 // PUBLIC PATH: /artifacts/{APP_ID}/public/data/poshakh_fabric_measure
                 const fabricsCollectionPath = `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`;
@@ -321,8 +323,7 @@
                     return;
                 }
 
-                const { doc, setDoc, serverTimestamp } = window.firebase;
-
+                const { doc, setDoc, serverTimestamp } = window.firebase.firestore;
                 const { name, totalLength, unit, lengthRequiredPerOutfit } = newFabric;
                 let imageUrlToStore = '';
 
@@ -369,8 +370,8 @@
                     lengthRequiredPerOutfit: parseFloat(lengthRequiredPerOutfit),
                     imageUrl: imageUrlToStore, // Store Base64 data
                     createdAt: serverTimestamp(),
-                    updatedByEmail: userEmail, // <-- NEW: Tracking
-                    updatedAt: serverTimestamp(), // <-- NEW: Tracking
+                    updatedByEmail: userEmail, // Tracking
+                    updatedAt: serverTimestamp(), // Tracking
                 };
 
                 try {
@@ -389,7 +390,7 @@
 
             const handleDeleteFabric = async (id) => {
                 if (!db || !userId) return;
-                const { doc, deleteDoc } = window.firebase;
+                const { doc, deleteDoc } = window.firebase.firestore;
 
                 try {
                     // Using PUBLIC PATH
@@ -405,7 +406,7 @@
             const handleUpdateStock = async (e) => {
                 e.preventDefault();
                 if (!db || !userId || !updateFabricId || !updateAmountUsed) return;
-                const { doc, setDoc } = window.firebase;
+                const { doc, setDoc, serverTimestamp } = window.firebase.firestore;
 
                 const fabric = fabrics.find(f => f.id === updateFabricId);
                 if (!fabric) return;
@@ -429,8 +430,8 @@
                     // Use setDoc with merge: true to update only the currentLength field
                     await setDoc(docRef, {
                         currentLength: newCurrentLength,
-                        updatedByEmail: userEmail, // <-- NEW: Tracking
-                        updatedAt: serverTimestamp(), // <-- NEW: Tracking
+                        updatedByEmail: userEmail, // Tracking
+                        updatedAt: serverTimestamp(), // Tracking
                     }, { merge: true });
 
                     setUpdateFabricId(null);
@@ -601,7 +602,10 @@
                                         <input
                                             type="file"
                                             accept="image/*"
-                                            // Removing 'capture' attribute allows the browser to offer Camera OR Gallery/File upload
+                                            // **FIXED: Added capture="environment" back while keeping accept="image/*" to encourage both options on mobile.**
+                                            // This combination usually prompts the user to select either the camera or the file picker.
+                                            accept="image/*"
+                                            capture="environment"
                                             className="flex-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                                             onChange={(e) => setNewFabricImageFile(e.target.files[0] || null)}
                                         />
