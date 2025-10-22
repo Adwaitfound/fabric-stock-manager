@@ -1,606 +1,657 @@
 <!DOCTYPE html>
-< lang="en">
+<html lang="en">
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Fabric Stock Manager</title>
-        <!-- Load Tailwind CSS -->
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fabric Stock Manager</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
-            body {
-                font-family: 'Inter', sans-serif;
-                background-color: #f9fafb;
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .card {
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .loading-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
             }
+        }
+    </style>
+</head>
 
-            .card {
-                transition: all 0.3s ease;
-            }
-
-            .card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            }
-
-            .loading-container {
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .spinner {
-                border: 4px solid rgba(0, 0, 0, 0.1);
-                border-left-color: #3b82f6;
-                border-radius: 50%;
-                width: 24px;
-                height: 24px;
-                animation: spin 1s linear infinite;
-            }
-
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-        </style>
-    </head>
-
-    <body>
-        <div id="root">
-            <div class="loading-container">
-                <div class="spinner mr-3"></div>
-                <div class="text-xl font-medium text-blue-500">Loading Application...</div>
-            </div>
+<body>
+    <div id="root">
+        <div class="loading-container">
+            <div class="spinner mr-3"></div>
+            <div class="text-xl font-medium text-blue-500">Loading Application...</div>
         </div>
+    </div>
 
-        <!-- React and Babel for JSX in browser -->
-        <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-        <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- React and Babel for JSX in browser -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-        <!-- Firebase SDKs -->
-        <script type="module">
-            // Note: The Firebase SDKs are now included here. 
-            // We no longer rely on the Canvas environment for injection.
-            import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-            import {
-                getAuth, signInAnonymously, onAuthStateChanged
-            } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-            import {
-                getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
-            } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- Firebase SDKs (Storage SDK is removed) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {
+            getAuth, signInAnonymously, onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {
+            getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-            // Expose Firebase modules globally for the Babel script to use
-            window.firebase = {
-                initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
-                getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
+        // Expose Firebase modules globally for the Babel script to use
+        window.firebase = {
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, serverTimestamp
+        };
+
+        // This script tag acts as a signal that Firebase modules are loaded
+        const event = new CustomEvent('firebase-loaded');
+        window.dispatchEvent(event);
+    </script>
+
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Icons (simplified from lucide-react for single-file HTML)
+        const Plus = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+        const Trash2 = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>;
+        const Gauge = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14v4"></path><path d="M8.5 13.5l1 1"></path><path d="M15.5 13.5l-1 1"></path><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path></svg>;
+        const Ruler = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 12L12 16L8 12"></path><path d="M4 4h16v16H4z"></path></svg>;
+        const Shirt = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.5 4.5l-2.5 7h-11l-2.5-7"></path><path d="M22 10l-2 10"></path><path d="M2 10l2 10"></path><path d="M12 2l4 2.5v2.5H8V4.5z"></path></svg>;
+        const Camera = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3l2-3h4l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path><circle cx="12" cy="13" r="3"></circle></svg>;
+        const Upload = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
+
+        // -----------------------------------------------------
+        // --- START: FIREBASE CONFIGURATION (ALREADY INSERTED) ---
+        // -----------------------------------------------------
+
+        // CONFIGURATION IS INSERTED AND SHOULD NOT NEED TO CHANGE
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyAvaMaBZKES07mXlxQzdAqRqLT0x4HOGKc",
+            authDomain: "poshapp-46816131-1bf59.firebaseapp.com",
+            projectId: "poshapp-46816131-1bf59",
+            storageBucket: "poshapp-46816131-1bf59.firebasestorage.app",
+            messagingSenderId: "531880756309",
+            appId: "1:531880756309:web:b4598124d889fa347a00dc"
+        };
+
+        // This is a default App ID used for the public data path.
+        const APP_ID = 'poshakh-fabric-manager';
+
+        // Set maximum file size (750KB) for Base64 storage due to 1MB Firestore limit
+        const MAX_FILE_SIZE_BYTES = 750 * 1024;
+
+        // -----------------------------------------------------
+        // --- END: FIREBASE CONFIGURATION ---
+        // -----------------------------------------------------
+
+
+        // Helper function to generate a unique ID
+        const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
+
+        // NEW HELPER: Compresses image using Canvas to reduce size/quality
+        const compressImage = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // We don't change dimensions, only quality (compression)
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, img.width, img.height);
+
+                    // Output the image as JPEG at 70% quality (0.7) for compression
+                    // The quality factor controls file size dramatically.
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+                    resolve(compressedDataUrl);
+                };
+                img.onerror = (error) => reject(error);
             };
+            reader.onerror = (error) => reject(error);
+        });
 
-            // This script tag acts as a signal that Firebase modules are loaded
-            const event = new CustomEvent('firebase-loaded');
-            window.dispatchEvent(event);
-        </script>
+        // Helper function to calculate byte size from Base64 Data URL for checking the limit
+        const getBase64ByteSize = (dataUrl) => {
+            // Data URL format is data:image/jpeg;base64,.....
+            // We get the base64 part and estimate its size
+            const base64String = dataUrl.split(',')[1];
+            // Roughly 4 characters = 3 bytes
+            return Math.ceil(base64String.length * 3 / 4);
+        };
 
+        const App = () => {
+            const [db, setDb] = useState(null);
+            const [userId, setUserId] = useState(null);
+            const [fabrics, setFabrics] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [isUploading, setIsUploading] = useState(false);
 
-        <script type="text/babel">
-            const { useState, useEffect, useMemo } = React;
-
-            // Icons (simplified from lucide-react for single-file HTML)
-            const Plus = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
-            const Trash2 = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>;
-            const Gauge = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14v4"></path><path d="M8.5 13.5l1 1"></path><path d="M15.5 13.5l-1 1"></path><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path></svg>;
-            const Ruler = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 12L12 16L8 12"></path><path d="M4 4h16v16H4z"></path></svg>;
-            const Shirt = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.5 4.5l-2.5 7h-11l-2.5-7"></path><path d="M22 10l-2 10"></path><path d="M2 10l2 10"></path><path d="M12 2l4 2.5v2.5H8V4.5z"></path></svg>;
-            const Camera = (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3l2-3h4l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path><circle cx="12" cy="13" r="3"></circle></svg>;
-
-            // -----------------------------------------------------
-            // --- START: FIREBASE CONFIGURATION (ACTION REQUIRED) ---
-            // -----------------------------------------------------
-
-            // 🛑 CONFIGURATION IS NOW INSERTED 🛑
-            // This configuration object links directly to your 'poshapp-46816131-1bf59' project.
-            const FIREBASE_CONFIG = {
-                apiKey: "AIzaSyAvaMaBZKES07mXlxQzdAqRqLT0x4HOGKc",
-                authDomain: "poshapp-46816131-1bf59.firebaseapp.com",
-                projectId: "poshapp-46816131-1bf59",
-                storageBucket: "poshapp-46816131-1bf59.firebasestorage.app",
-                messagingSenderId: "531880756309",
-                appId: "1:531880756309:web:b4598124d889fa347a00dc"
-            };
-
-            // This is a default App ID used for the public data path.
-            const APP_ID = 'poshakh-fabric-manager';
-
-            // -----------------------------------------------------
-            // --- END: FIREBASE CONFIGURATION ---
-            // -----------------------------------------------------
-
-
-            // Helper function to generate a unique ID
-            const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
-
-            // Helper function to convert a File object to a Base64 string
-            const fileToBase64 = (file) => new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = (error) => reject(error);
+            // Form State
+            const [newFabric, setNewFabric] = useState({
+                name: '',
+                totalLength: '',
+                unit: 'meters',
+                lengthRequiredPerOutfit: '',
             });
+            const [newFabricImageFile, setNewFabricImageFile] = useState(null);
 
-            const App = () => {
-                const [db, setDb] = useState(null);
-                const [userId, setUserId] = useState(null);
-                const [fabrics, setFabrics] = useState([]);
-                const [loading, setLoading] = useState(true);
-                const [error, setError] = useState(null);
+            // State for updating current stock
+            const [updateFabricId, setUpdateFabricId] = useState(null);
+            const [updateAmountUsed, setUpdateAmountUsed] = useState('');
 
-                // Form State
-                const [newFabric, setNewFabric] = useState({
-                    name: '',
-                    totalLength: '',
-                    unit: 'meters',
-                    lengthRequiredPerOutfit: '',
-                });
-                const [newFabricImageFile, setNewFabricImageFile] = useState(null);
+            // ------------------------------------
+            // 1. FIREBASE INITIALIZATION & AUTHENTICATION
+            // ------------------------------------
 
-                // State for updating current stock
-                const [updateFabricId, setUpdateFabricId] = useState(null);
-                const [updateAmountUsed, setUpdateAmountUsed] = useState('');
+            useEffect(() => {
+                // Wait for Firebase SDKs to load before attempting to initialize
+                const initializeFirebase = async () => {
+                    const { initializeApp, getFirestore, getAuth, onAuthStateChanged, signInAnonymously } = window.firebase;
 
-                // ------------------------------------
-                // 1. FIREBASE INITIALIZATION & AUTHENTICATION
-                // ------------------------------------
+                    try {
+                        console.log("Attempting Firebase init with config:", FIREBASE_CONFIG);
 
-                useEffect(() => {
-                    // Wait for Firebase SDKs to load before attempting to initialize
-                    const initializeFirebase = async () => {
-                        const { initializeApp, getFirestore, getAuth, onAuthStateChanged, signInAnonymously } = window.firebase;
+                        const app = initializeApp(FIREBASE_CONFIG);
+                        const firestore = getFirestore(app);
+                        const firebaseAuth = getAuth(app);
 
-                        try {
-                            // Log config before init to debug config issues
-                            console.log("Attempting Firebase init with config:", FIREBASE_CONFIG);
+                        setDb(firestore);
 
-                            const app = initializeApp(FIREBASE_CONFIG);
-                            const firestore = getFirestore(app);
-                            const firebaseAuth = getAuth(app);
-
-                            setDb(firestore);
-
-                            // Sign in anonymously for shared, persistent access
-                            onAuthStateChanged(firebaseAuth, async (user) => {
-                                if (user) {
-                                    setUserId(user.uid);
-                                    console.log("Authenticated user:", user.uid);
-                                } else {
-                                    // If user is not signed in, sign in anonymously
-                                    console.log("Attempting anonymous sign in...");
-                                    const anonUser = await signInAnonymously(firebaseAuth);
-                                    setUserId(anonUser.user.uid);
-                                    console.log("Successfully signed in anonymously:", anonUser.user.uid);
-                                }
-                                setLoading(false);
-                            });
-                        } catch (e) {
-                            // Catch the specific 'auth/configuration-not-found' or other init errors
-                            console.error("Error during Firebase setup:", e);
-                            if (e.code && e.code.includes('auth')) {
-                                // More generic auth error message for robustness
-                                setError("Firebase Authentication Error. Please ensure: 1) **Anonymous Sign-in** is enabled in your Firebase Console (Authentication -> Sign-in method). 2) Your API keys are correct.");
+                        // Sign in anonymously for shared, persistent access
+                        onAuthStateChanged(firebaseAuth, async (user) => {
+                            if (user) {
+                                setUserId(user.uid);
                             } else {
-                                setError("Failed to initialize Firebase. Please check your config keys and that the services (Firestore/Auth) are enabled.");
+                                // If user is not signed in, sign in anonymously
+                                const anonUser = await signInAnonymously(firebaseAuth);
+                                setUserId(anonUser.user.uid);
                             }
                             setLoading(false);
-                        }
-                    };
-
-                    if (window.firebase) {
-                        initializeFirebase();
-                    } else {
-                        window.addEventListener('firebase-loaded', initializeFirebase, { once: true });
-                    }
-
-                    return () => {
-                        window.removeEventListener('firebase-loaded', initializeFirebase);
-                    };
-                }, []);
-
-                // ------------------------------------
-                // 2. FIRESTORE REAL-TIME LISTENER (CRUD R)
-                // ------------------------------------
-
-                useEffect(() => {
-                    if (!db || !userId) return;
-
-                    const { collection, query, onSnapshot } = window.firebase;
-
-                    // PUBLIC PATH: /artifacts/{APP_ID}/public/data/poshakh_fabric_measure
-                    const fabricsCollectionPath = `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`;
-                    const q = query(collection(db, fabricsCollectionPath));
-
-                    const unsubscribe = onSnapshot(q, (snapshot) => {
-                        const fabricList = snapshot.docs.map(doc => {
-                            const data = doc.data();
-                            // Ensure numbers are parsed correctly from Firestore
-                            const currentLength = parseFloat(data.currentLength) || 0;
-                            const lengthRequiredPerOutfit = parseFloat(data.lengthRequiredPerOutfit) || 1;
-
-                            // Calculate potential outfits
-                            const potentialOutfits = Math.floor(currentLength / lengthRequiredPerOutfit);
-
-                            return {
-                                id: doc.id,
-                                ...data,
-                                currentLength,
-                                lengthRequiredPerOutfit,
-                                potentialOutfits,
-                            };
                         });
-                        setFabrics(fabricList);
-                    }, (e) => {
-                        console.error("Firestore Error:", e);
-                        setError("Failed to fetch fabrics inventory in real-time. Check Firestore security rules.");
+                    } catch (e) {
+                        console.error("Error during Firebase setup:", e);
+                        if (e.code && e.code.includes('auth')) {
+                            setError("Firebase Authentication Error. Please ensure: 1) **Anonymous Sign-in** is enabled in your Firebase Console (Authentication -> Sign-in method). 2) Your API keys are correct.");
+                        } else {
+                            setError("Failed to initialize Firebase. Please check your config keys and that the services (Firestore/Auth) are enabled.");
+                        }
+                        setLoading(false);
+                    }
+                };
+
+                if (window.firebase) {
+                    initializeFirebase();
+                } else {
+                    window.addEventListener('firebase-loaded', initializeFirebase, { once: true });
+                }
+
+                return () => {
+                    window.removeEventListener('firebase-loaded', initializeFirebase);
+                };
+            }, []);
+
+            // ------------------------------------
+            // 2. FIRESTORE REAL-TIME LISTENER (CRUD R)
+            // ------------------------------------
+
+            useEffect(() => {
+                if (!db || !userId) return;
+
+                const { collection, query, onSnapshot } = window.firebase;
+
+                // PUBLIC PATH: /artifacts/{APP_ID}/public/data/poshakh_fabric_measure
+                const fabricsCollectionPath = `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`;
+                const q = query(collection(db, fabricsCollectionPath));
+
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const fabricList = snapshot.docs.map(doc => {
+                        const data = doc.data();
+                        // Ensure numbers are parsed correctly from Firestore
+                        const currentLength = parseFloat(data.currentLength) || 0;
+                        const lengthRequiredPerOutfit = parseFloat(data.lengthRequiredPerOutfit) || 1;
+
+                        // Calculate potential outfits
+                        const potentialOutfits = Math.floor(currentLength / lengthRequiredPerOutfit);
+
+                        return {
+                            id: doc.id,
+                            ...data,
+                            currentLength,
+                            lengthRequiredPerOutfit,
+                            potentialOutfits,
+                        };
                     });
+                    setFabrics(fabricList);
+                }, (e) => {
+                    console.error("Firestore Error:", e);
+                    setError("Failed to fetch fabrics inventory in real-time. Check Firestore security rules.");
+                });
 
-                    return () => unsubscribe();
-                }, [db, userId]);
+                return () => unsubscribe();
+            }, [db, userId]);
 
-                // ------------------------------------
-                // 3. FIRESTORE MUTATION FUNCTIONS (CRUD CUD)
-                // ------------------------------------
+            // ------------------------------------
+            // 3. FIRESTORE MUTATION FUNCTIONS (CRUD CUD)
+            // ------------------------------------
 
-                const handleAddFabric = async (e) => {
-                    e.preventDefault();
-                    if (!db || !userId) return;
+            const handleAddFabric = async (e) => {
+                e.preventDefault();
+                if (!db || !userId) return;
 
-                    const { doc, setDoc, serverTimestamp } = window.firebase;
+                const { doc, setDoc, serverTimestamp } = window.firebase;
 
-                    const { name, totalLength, unit, lengthRequiredPerOutfit } = newFabric;
-                    let imageUrlToStore = '';
+                const { name, totalLength, unit, lengthRequiredPerOutfit } = newFabric;
+                let imageUrlToStore = '';
 
-                    if (!name || !totalLength || !lengthRequiredPerOutfit) {
-                        setError("Please fill in the fabric Name, Total Length, and Required Length per Outfit.");
-                        return;
-                    }
-
-                    if (newFabricImageFile) {
-                        if (newFabricImageFile.size > 500000) {
-                            setError("Image file is too large (>500KB). Please use a smaller image file.");
-                            return;
-                        }
-                        try {
-                            imageUrlToStore = await fileToBase64(newFabricImageFile);
-                        } catch (error) {
-                            console.error("Error converting file to Base64:", error);
-                            setError("Failed to process image file. Please try again or skip the image.");
-                            return;
-                        }
-                    } else {
-                        imageUrlToStore = `https://placehold.co/100x100/38bdf8/ffffff?text=${name.substring(0, 2).toUpperCase()}`;
-                    }
-
-
-                    const docId = generateId();
-                    const newDoc = {
-                        name,
-                        totalLength: parseFloat(totalLength),
-                        currentLength: parseFloat(totalLength),
-                        unit,
-                        lengthRequiredPerOutfit: parseFloat(lengthRequiredPerOutfit),
-                        imageUrl: imageUrlToStore,
-                        createdAt: serverTimestamp(),
-                    };
-
-                    try {
-                        // Using PUBLIC PATH: /artifacts/{APP_ID}/public/data/poshakh_fabric_measure
-                        const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, docId);
-                        await setDoc(docRef, newDoc);
-                        setNewFabric({ name: '', totalLength: '', unit: 'meters', lengthRequiredPerOutfit: '' });
-                        setNewFabricImageFile(null);
-                        setError(null);
-                    } catch (e) {
-                        console.error("Error adding document: ", e);
-                        setError("Failed to add new fabric stock to Firebase.");
-                    }
-                };
-
-                const handleDeleteFabric = async (id) => {
-                    if (!db || !userId) return;
-                    const { doc, deleteDoc } = window.firebase;
-                    try {
-                        // Using PUBLIC PATH
-                        const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, id);
-                        await deleteDoc(docRef);
-                        setError(null);
-                    } catch (e) {
-                        console.error("Error deleting document: ", e);
-                        setError("Failed to delete fabric entry from Firebase.");
-                    }
-                };
-
-                const handleUpdateStock = async (e) => {
-                    e.preventDefault();
-                    if (!db || !userId || !updateFabricId || !updateAmountUsed) return;
-                    const { doc, setDoc } = window.firebase;
-
-                    const fabric = fabrics.find(f => f.id === updateFabricId);
-                    if (!fabric) return;
-
-                    const amountUsed = parseFloat(updateAmountUsed);
-                    if (isNaN(amountUsed) || amountUsed <= 0) {
-                        setError("Please enter a valid amount of fabric used (a positive number).");
-                        return;
-                    }
-
-                    const newCurrentLength = fabric.currentLength - amountUsed;
-
-                    if (newCurrentLength < 0) {
-                        setError(`Cannot use ${amountUsed} ${fabric.unit}. Only ${fabric.currentLength.toFixed(2)} ${fabric.unit} remaining.`);
-                        return;
-                    }
-
-                    try {
-                        // Using PUBLIC PATH
-                        const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, updateFabricId);
-                        // Use setDoc with merge: true to update only the currentLength field
-                        await setDoc(docRef, { currentLength: newCurrentLength }, { merge: true });
-
-                        setUpdateFabricId(null);
-                        setUpdateAmountUsed('');
-                        setError(null);
-                    } catch (e) {
-                        console.error("Error updating stock: ", e);
-                        setError("Failed to update fabric stock in Firebase.");
-                    }
-                };
-
-                // ------------------------------------
-                // 4. DERIVED STATE & UI RENDERING
-                // ------------------------------------
-
-                const totalPotentialOutfits = useMemo(() => {
-                    return fabrics.reduce((sum, f) => sum + f.potentialOutfits, 0);
-                }, [fabrics]);
-
-                if (loading) {
-                    return (
-                        <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                            <div className="spinner mr-3"></div>
-                            <div className="text-xl font-medium text-blue-500">Connecting to Firebase...</div>
-                        </div>
-                    );
+                if (!name || !totalLength || !lengthRequiredPerOutfit) {
+                    setError("Please fill in the fabric Name, Total Length, and Required Length per Outfit.");
+                    return;
                 }
 
-                if (error) {
-                    return (
-                        <div className="p-8 bg-red-100 border-l-4 border-red-500 text-red-700 min-h-screen">
-                            <p className="font-bold">Application Error</p>
-                            <p>{error}</p>
-                            <p className="mt-2 text-sm text-gray-600">User ID: {userId || 'N/A'}</p>
-                        </div>
-                    );
+                setIsUploading(true);
+                setError(null);
+
+                if (newFabricImageFile) {
+                    try {
+                        // 1. COMPRESS IMAGE QUALITY (New Step)
+                        const compressedDataUrl = await compressImage(newFabricImageFile);
+
+                        // 2. CHECK SIZE AFTER COMPRESSION
+                        const sizeAfterCompression = getBase64ByteSize(compressedDataUrl);
+
+                        if (sizeAfterCompression > MAX_FILE_SIZE_BYTES) {
+                            setError(`Even after compression, the image is too large (${(sizeAfterCompression / 1024).toFixed(0)}KB). Please use a smaller source image.`);
+                            setIsUploading(false);
+                            return;
+                        }
+
+                        imageUrlToStore = compressedDataUrl;
+                    } catch (error) {
+                        console.error("Error processing or compressing image:", error);
+                        setError("Failed to process image file. Please try again or skip the image.");
+                        setIsUploading(false);
+                        return;
+                    }
+                } else {
+                    imageUrlToStore = `https://placehold.co/100x100/38bdf8/ffffff?text=${name.substring(0, 2).toUpperCase()}`;
                 }
 
+
+                const docId = generateId();
+                const newDoc = {
+                    name,
+                    totalLength: parseFloat(totalLength),
+                    currentLength: parseFloat(totalLength),
+                    unit,
+                    lengthRequiredPerOutfit: parseFloat(lengthRequiredPerOutfit),
+                    imageUrl: imageUrlToStore, // Store Base64 data
+                    createdAt: serverTimestamp(),
+                };
+
+                try {
+                    // Using PUBLIC PATH: /artifacts/{APP_ID}/public/data/poshakh_fabric_measure
+                    const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, docId);
+                    await setDoc(docRef, newDoc);
+                    setNewFabric({ name: '', totalLength: '', unit: 'meters', lengthRequiredPerOutfit: '' });
+                    setNewFabricImageFile(null);
+                } catch (e) {
+                    console.error("Error adding document: ", e);
+                    setError("Failed to add new fabric stock to Firebase. Ensure all data fields are correct.");
+                } finally {
+                    setIsUploading(false);
+                }
+            };
+
+            const handleDeleteFabric = async (id) => {
+                if (!db || !userId) return;
+                const { doc, deleteDoc } = window.firebase;
+
+                try {
+                    // Using PUBLIC PATH
+                    const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, id);
+                    await deleteDoc(docRef);
+                    setError(null);
+                } catch (e) {
+                    console.error("Error deleting document: ", e);
+                    setError("Failed to delete fabric entry from Firebase.");
+                }
+            };
+
+            const handleUpdateStock = async (e) => {
+                e.preventDefault();
+                if (!db || !userId || !updateFabricId || !updateAmountUsed) return;
+                const { doc, setDoc } = window.firebase;
+
+                const fabric = fabrics.find(f => f.id === updateFabricId);
+                if (!fabric) return;
+
+                const amountUsed = parseFloat(updateAmountUsed);
+                if (isNaN(amountUsed) || amountUsed <= 0) {
+                    setError("Please enter a valid amount of fabric used (a positive number).");
+                    return;
+                }
+
+                const newCurrentLength = fabric.currentLength - amountUsed;
+
+                if (newCurrentLength < 0) {
+                    setError(`Cannot use ${amountUsed} ${fabric.unit}. Only ${fabric.currentLength.toFixed(2)} ${fabric.unit} remaining.`);
+                    return;
+                }
+
+                try {
+                    // Using PUBLIC PATH
+                    const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, updateFabricId);
+                    // Use setDoc with merge: true to update only the currentLength field
+                    await setDoc(docRef, { currentLength: newCurrentLength }, { merge: true });
+
+                    setUpdateFabricId(null);
+                    setUpdateAmountUsed('');
+                    setError(null);
+                } catch (e) {
+                    console.error("Error updating stock: ", e);
+                    setError("Failed to update fabric stock in Firebase.");
+                }
+            };
+
+            // ------------------------------------
+            // 4. DERIVED STATE & UI RENDERING
+            // ------------------------------------
+
+            const totalPotentialOutfits = useMemo(() => {
+                return fabrics.reduce((sum, f) => sum + f.potentialOutfits, 0);
+            }, [fabrics]);
+
+            if (loading) {
                 return (
-                    <div className="p-4 md:p-8 bg-gray-50 min-h-screen font-sans">
-                        <div className="max-w-6xl mx-auto">
-                            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">Fabric Stock Manager</h1>
-                            <p className="text-sm text-gray-500 mb-6">
-                                Storage Mode: **SHARED (Firebase)** | User ID: <span className="font-mono bg-gray-200 p-1 rounded-md text-xs">{userId}</span>
-                            </p>
-                            <p className="text-sm text-green-700 mb-6 bg-green-100 p-2 rounded-lg border border-green-300 font-semibold">
-                                <span className="font-bold">Team Sharing Active:</span> Data is now saved and synchronized in real-time on your Firebase project.
-                            </p>
+                    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                        <div className="spinner mr-3"></div>
+                        <div className="text-xl font-medium text-blue-500">Connecting to Firebase...</div>
+                    </div>
+                );
+            }
 
-                            {/* Global Stats */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                                <div className="card bg-blue-500 text-white p-6 rounded-xl shadow-lg flex items-center">
-                                    <Gauge className="w-8 h-8 mr-4" />
-                                    <div>
-                                        <p className="text-sm opacity-80 uppercase font-semibold">Total Fabrics</p>
-                                        <p className="text-3xl font-bold">{fabrics.length}</p>
-                                    </div>
-                                </div>
-                                <div className="card bg-green-500 text-white p-6 rounded-xl shadow-lg flex items-center col-span-1 md:col-span-2">
-                                    <Shirt className="w-8 h-8 mr-4" />
-                                    <div>
-                                        <p className="text-sm opacity-80 uppercase font-semibold">Total Potential Outfits Remaining</p>
-                                        <p className="text-3xl font-bold">{totalPotentialOutfits}</p>
-                                    </div>
+            if (error) {
+                return (
+                    <div className="p-8 bg-red-100 border-l-4 border-red-500 text-red-700 min-h-screen">
+                        <p className="font-bold">Application Error</p>
+                        <p>{error}</p>
+                        <p className="mt-2 text-sm text-gray-600">User ID: {userId || 'N/A'}</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-4 md:p-8 bg-gray-50 min-h-screen font-sans">
+                    <div className="max-w-6xl mx-auto">
+                        <h1 className="text-4xl font-extrabold text-gray-900 mb-2">Fabric Stock Manager</h1>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Storage Mode: **SHARED (Firebase)** | User ID: <span className="font-mono bg-gray-200 p-1 rounded-md text-xs">{userId}</span>
+                        </p>
+                        <p className="text-sm text-green-700 mb-6 bg-green-100 p-2 rounded-lg border border-green-300 font-semibold">
+                            <span className="font-bold">Team Sharing Active:</span> Data is now saved and synchronized in real-time on your Firebase project.
+                        </p>
+
+                        {/* Global Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                            <div className="card bg-blue-500 text-white p-6 rounded-xl shadow-lg flex items-center">
+                                <Gauge className="w-8 h-8 mr-4" />
+                                <div>
+                                    <p className="text-sm opacity-80 uppercase font-semibold">Total Fabrics</p>
+                                    <p className="text-3xl font-bold">{fabrics.length}</p>
                                 </div>
                             </div>
+                            <div className="card bg-green-500 text-white p-6 rounded-xl shadow-lg flex items-center col-span-1 md:col-span-2">
+                                <Shirt className="w-8 h-8 mr-4" />
+                                <div>
+                                    <p className="text-sm opacity-80 uppercase font-semibold">Total Potential Outfits Remaining</p>
+                                    <p className="text-3xl font-bold">{totalPotentialOutfits}</p>
+                                </div>
+                            </div>
+                        </div>
 
-                            {/* Add New Fabric Section */}
-                            <div className="card bg-white p-6 rounded-xl shadow-lg mb-8">
-                                <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center"><Plus className="w-5 h-5 mr-2" /> Add New Fabric Stock</h2>
-                                <form onSubmit={handleAddFabric} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {/* Fabric Name */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Fabric Name</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
-                                            value={newFabric.name}
-                                            onChange={(e) => setNewFabric({ ...newFabric, name: e.target.value })}
-                                        />
-                                    </div>
+                        {/* Add New Fabric Section */}
+                        <div className="card bg-white p-6 rounded-xl shadow-lg mb-8">
+                            <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                                <Plus className="w-5 h-5 mr-2" /> Add New Fabric Stock
+                            </h2>
+                            <form onSubmit={handleAddFabric} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {/* Fabric Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Fabric Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
+                                        value={newFabric.name}
+                                        onChange={(e) => setNewFabric({ ...newFabric, name: e.target.value })}
+                                    />
+                                </div>
 
-                                    {/* Total Length */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Total Length in Stock</label>
-                                        <div className="mt-1 flex rounded-md shadow-sm">
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                required
-                                                className="flex-1 block w-full rounded-l-md border-gray-300 p-2 border focus:ring-blue-500 focus:border-blue-500"
-                                                value={newFabric.totalLength}
-                                                onChange={(e) => setNewFabric({ ...newFabric, totalLength: e.target.value })}
-                                            />
-                                            <select
-                                                className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm"
-                                                value={newFabric.unit}
-                                                onChange={(e) => setNewFabric({ ...newFabric, unit: e.target.value })}
-                                            >
-                                                <option value="meters">meters</option>
-                                                <option value="yards">yards</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Length Required Per Outfit */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Length Required per Outfit</label>
+                                {/* Total Length */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Total Length in Stock</label>
+                                    <div className="mt-1 flex rounded-md shadow-sm">
                                         <input
                                             type="number"
                                             step="0.01"
-                                            min="0.1"
+                                            min="0"
                                             required
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
-                                            value={newFabric.lengthRequiredPerOutfit}
-                                            onChange={(e) => setNewFabric({ ...newFabric, lengthRequiredPerOutfit: e.target.value })}
+                                            className="flex-1 block w-full rounded-l-md border-gray-300 p-2 border focus:ring-blue-500 focus:border-blue-500"
+                                            value={newFabric.totalLength}
+                                            onChange={(e) => setNewFabric({ ...newFabric, totalLength: e.target.value })}
                                         />
-                                        <p className="mt-1 text-xs text-gray-500">How much {newFabric.unit} to make one average outfit?</p>
-                                    </div>
-
-                                    {/* Image Capture Input */}
-                                    <div className="md:col-span-2 lg:col-span-3">
-                                        <label className="block text-sm font-medium text-gray-700">Fabric Image (Take Photo or Upload)</label>
-                                        <div className="mt-1 flex items-center">
-                                            <Camera className="w-5 h-5 text-gray-400 mr-2" />
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                capture="environment" // Mobile camera access
-                                                className="flex-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                                onChange={(e) => setNewFabricImageFile(e.target.files[0] || null)}
-                                            />
-                                        </div>
-                                        {newFabricImageFile && <p className="mt-1 text-xs text-green-600">File selected: {newFabricImageFile.name}</p>}
-                                        <p className="mt-1 text-xs text-gray-500">Images are stored in Firebase as a Base64 string for persistent storage.</p>
-                                    </div>
-
-                                    {/* Submit Button */}
-                                    <div className="md:col-span-2 lg:col-span-3 pt-2">
-                                        <button
-                                            type="submit"
-                                            className="w-full justify-center inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150"
+                                        <select
+                                            className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm"
+                                            value={newFabric.unit}
+                                            onChange={(e) => setNewFabric({ ...newFabric, unit: e.target.value })}
                                         >
-                                            <Plus className="w-5 h-5 mr-2" /> Add Fabric to Stock
-                                        </button>
+                                            <option value="meters">meters</option>
+                                            <option value="yards">yards</option>
+                                        </select>
                                     </div>
-                                </form>
-                            </div>
+                                </div>
 
-                            {/* Current Stock List */}
-                            <h2 className="text-3xl font-bold text-gray-900 mb-6">Current Fabric Stock ({fabrics.length} items)</h2>
+                                {/* Length Required Per Outfit */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Length Required per Outfit</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0.1"
+                                        required
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
+                                        value={newFabric.lengthRequiredPerOutfit}
+                                        onChange={(e) => setNewFabric({ ...newFabric, lengthRequiredPerOutfit: e.target.value })}
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">How much {newFabric.unit} to make one average outfit?</p>
+                                </div>
 
-                            {fabrics.length === 0 ? (
-                                <div className="p-8 text-center bg-white rounded-xl shadow-lg text-gray-500">No fabric stock recorded yet. Use the form above to add an item!</div>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-6">
-                                    {fabrics.map((fabric) => (
-                                        <div key={fabric.id} className="card bg-white p-5 rounded-xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center">
-                                            <div className="flex items-center mb-4 md:mb-0 w-full md:w-3/5">
-                                                {/* Image Placeholder/Display */}
-                                                <img
-                                                    src={fabric.imageUrl}
-                                                    alt={fabric.name}
-                                                    className="w-20 h-20 object-cover rounded-lg shadow-inner mr-4 border border-gray-200"
-                                                    onError={(e) => {
-                                                        e.target.onerror = null;
-                                                        e.target.src = `https://placehold.co/80x80/ef4444/ffffff?text=Image+N/A`;
-                                                    }}
-                                                />
-                                                {/* Fabric Details */}
-                                                <div>
-                                                    <h3 className="text-xl font-bold text-gray-900">{fabric.name}</h3>
-                                                    <div className="text-sm text-gray-600 space-y-1 mt-1">
-                                                        <p className="flex items-center"><Ruler className="w-4 h-4 mr-2 text-blue-500" /> Total Length: {fabric.totalLength.toFixed(2)} {fabric.unit}</p>
-                                                        <p className="flex items-center"><Shirt className="w-4 h-4 mr-2 text-green-500" /> Req. per Outfit: {fabric.lengthRequiredPerOutfit.toFixed(2)} {fabric.unit}</p>
-                                                    </div>
+                                {/* Image Capture Input */}
+                                <div className="md:col-span-2 lg:col-span-3">
+                                    <label className="block text-sm font-medium text-gray-700">Fabric Image (Auto-Compress to Fit Size Limit)</label>
+                                    <div className="mt-1 flex items-center">
+                                        <Camera className="w-5 h-5 text-gray-400 mr-2" />
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="flex-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                            onChange={(e) => setNewFabricImageFile(e.target.files[0] || null)}
+                                        />
+                                    </div>
+                                    {newFabricImageFile && <p className="mt-1 text-xs text-green-600">File selected: {newFabricImageFile.name}</p>}
+                                    <p className="mt-1 text-xs text-gray-500 font-semibold text-red-600">
+                                        Image is automatically compressed to fit the 750 KB storage limit.
+                                    </p>
+                                </div>
+
+                                {/* Submit Button */}
+                                <div className="md:col-span-2 lg:col-span-3 pt-2">
+                                    <button
+                                        type="submit"
+                                        disabled={isUploading}
+                                        className={`w-full justify-center inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-base font-medium text-white transition duration-150 ${isUploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'}`}
+                                    >
+                                        {isUploading ? (
+                                            <>
+                                                <span className="spinner mr-2"></span> Compressing and Saving...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Plus className="w-5 h-5 mr-2" /> Add Fabric to Stock
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Current Stock List */}
+                        <h2 className="text-3xl font-bold text-gray-900 mb-6">Current Fabric Stock ({fabrics.length} items)</h2>
+
+                        {fabrics.length === 0 ? (
+                            <div className="p-8 text-center bg-white rounded-xl shadow-lg text-gray-500">No fabric stock recorded yet. Use the form above to add an item!</div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-6">
+                                {fabrics.map((fabric) => (
+                                    <div key={fabric.id} className="card bg-white p-5 rounded-xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center">
+                                        <div className="flex items-center mb-4 md:mb-0 w-full md:w-3/5">
+                                            {/* Image Placeholder/Display */}
+                                            <img
+                                                src={fabric.imageUrl}
+                                                alt={fabric.name}
+                                                className="w-20 h-20 object-cover rounded-lg shadow-inner mr-4 border border-gray-200"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.src = `https://placehold.co/80x80/ef4444/ffffff?text=Image+N/A`;
+                                                }}
+                                            />
+                                            {/* Fabric Details */}
+                                            <div>
+                                                <h3 className="text-xl font-bold text-gray-900">{fabric.name}</h3>
+                                                <div className="text-sm text-gray-600 space-y-1 mt-1">
+                                                    <p className="flex items-center"><Ruler className="w-4 h-4 mr-2 text-blue-500" /> Total Length: {fabric.totalLength.toFixed(2)} {fabric.unit}</p>
+                                                    <p className="flex items-center"><Shirt className="w-4 h-4 mr-2 text-green-500" /> Req. per Outfit: {fabric.lengthRequiredPerOutfit.toFixed(2)} {fabric.unit}</p>
                                                 </div>
-                                            </div>
-
-                                            {/* Stock & Calculation */}
-                                            <div className="w-full md:w-2/5 flex flex-col space-y-3">
-                                                <div className="flex justify-between items-center bg-gray-100 p-3 rounded-lg">
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-500">Remaining Stock</p>
-                                                        <p className="text-2xl font-extrabold text-blue-600">
-                                                            {fabric.currentLength.toFixed(2)} {fabric.unit}
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-500">Potential Outfits</p>
-                                                        <p className="text-2xl font-extrabold text-green-600">
-                                                            {fabric.potentialOutfits}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Stock Update Form / Delete Button */}
-                                                {updateFabricId === fabric.id ? (
-                                                    <form onSubmit={handleUpdateStock} className="flex space-x-2">
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0.01"
-                                                            required
-                                                            placeholder={`Amount used (${fabric.unit})`}
-                                                            className="flex-1 p-2 border border-yellow-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
-                                                            value={updateAmountUsed}
-                                                            onChange={(e) => setUpdateAmountUsed(e.target.value)}
-                                                        />
-                                                        <button
-                                                            type="submit"
-                                                            className="bg-yellow-500 text-white px-4 py-2 rounded-md font-medium hover:bg-yellow-600 transition duration-150"
-                                                        >
-                                                            Use
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => { setUpdateFabricId(null); setUpdateAmountUsed(''); }}
-                                                            className="bg-gray-300 text-gray-800 px-3 py-2 rounded-md font-medium hover:bg-gray-400 transition duration-150"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </form>
-                                                ) : (
-                                                    <div className="flex space-x-2">
-                                                        <button
-                                                            onClick={() => setUpdateFabricId(fabric.id)}
-                                                            className="flex-1 bg-yellow-400 text-gray-900 px-4 py-2 rounded-md font-medium hover:bg-yellow-500 transition duration-150 shadow-md"
-                                                        >
-                                                            Update Stock (Use Material)
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteFabric(fabric.id)}
-                                                            className="p-3 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition duration-150"
-                                                            title="Delete Fabric Entry"
-                                                        >
-                                                            <Trash2 className="w-5 h-5" />
-                                                        </button>
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            };
 
-            // Render the App
-            const container = document.getElementById('root');
-            // Use React 18's createRoot API
-            const root = ReactDOM.createRoot(container);
-            root.render(<App />);
-        </script>
-    </body>
+                                        {/* Stock & Calculation */}
+                                        <div className="w-full md:w-2/5 flex flex-col space-y-3">
+                                            <div className="flex justify-between items-center bg-gray-100 p-3 rounded-lg">
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-500">Remaining Stock</p>
+                                                    <p className="text-2xl font-extrabold text-blue-600">
+                                                        {fabric.currentLength.toFixed(2)} {fabric.unit}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-500">Potential Outfits</p>
+                                                    <p className="text-2xl font-extrabold text-green-600">
+                                                        {fabric.potentialOutfits}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Stock Update Form / Delete Button */}
+                                            {updateFabricId === fabric.id ? (
+                                                <form onSubmit={handleUpdateStock} className="flex space-x-2">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0.01"
+                                                        required
+                                                        placeholder={`Amount used (${fabric.unit})`}
+                                                        className="flex-1 p-2 border border-yellow-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
+                                                        value={updateAmountUsed}
+                                                        onChange={(e) => setUpdateAmountUsed(e.target.value)}
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        className="bg-yellow-500 text-white px-4 py-2 rounded-md font-medium hover:bg-yellow-600 transition duration-150"
+                                                    >
+                                                        Use
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setUpdateFabricId(null); setUpdateAmountUsed(''); }}
+                                                        className="bg-gray-300 text-gray-800 px-3 py-2 rounded-md font-medium hover:bg-gray-400 transition duration-150"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </form>
+                                            ) : (
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={() => setUpdateFabricId(fabric.id)}
+                                                        className="flex-1 bg-yellow-400 text-gray-900 px-4 py-2 rounded-md font-medium hover:bg-yellow-500 transition duration-150 shadow-md"
+                                                    >
+                                                        Update Stock (Use Material)
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteFabric(fabric.id)}
+                                                        className="p-3 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition duration-150"
+                                                        title="Delete Fabric Entry"
+                                                    >
+                                                        <Trash2 className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the App
+        const container = document.getElementById('root');
+        // Use React 18's createRoot API
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
