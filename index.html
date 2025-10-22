@@ -125,8 +125,6 @@
 
         // Set maximum file size (750KB) for Base64 storage due to 1MB Firestore limit
         const MAX_FILE_SIZE_BYTES = 750 * 1024;
-        // NEW: Max dimension for faster compression (e.g., 800 pixels)
-        const MAX_DIMENSION = 800;
 
         // -----------------------------------------------------
         // --- END: FIREBASE CONFIGURATION ---
@@ -136,11 +134,10 @@
         // Helper function to generate a unique ID
         const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
 
-        // UPDATED HELPER: Compresses image by limiting dimensions AND quality (Added explicit error check)
-        const compressImage = (file) => new Promise((resolve, reject) => {
+        // ORIGINAL HELPER: Converts file to Base64 without compression
+        const fileToBase64 = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
 
-            // Handle file reading errors
             reader.onerror = (error) => {
                 console.error("FileReader Error:", error);
                 reject(new Error("Failed to read file."));
@@ -149,48 +146,7 @@
             reader.readAsDataURL(file);
 
             reader.onload = (event) => {
-                const img = new Image();
-                img.src = event.target.result;
-
-                // Handle image loading errors
-                img.onerror = (error) => {
-                    console.error("Image Load Error:", error);
-                    reject(new Error("Failed to load image into memory."));
-                };
-
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-
-                    let width = img.width;
-                    let height = img.height;
-
-                    // Calculate new dimensions to fit within MAX_DIMENSION
-                    if (width > height) {
-                        if (width > MAX_DIMENSION) {
-                            height *= MAX_DIMENSION / width;
-                            width = MAX_DIMENSION;
-                        }
-                    } else {
-                        if (height > MAX_DIMENSION) {
-                            width *= MAX_DIMENSION / height;
-                            height = MAX_DIMENSION;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Use file.type if available, otherwise default to image/jpeg
-                    const mimeType = file.type || 'image/jpeg';
-
-                    // Output the image as compressed JPEG/MIME type at 80% quality (0.8). 
-                    const compressedDataUrl = canvas.toDataURL(mimeType, 0.8);
-
-                    resolve(compressedDataUrl);
-                };
+                resolve(event.target.result);
             };
         });
 
@@ -347,19 +303,19 @@
 
                 if (newFabricImageFile) {
                     try {
-                        const compressedDataUrl = await compressImage(newFabricImageFile);
-                        const sizeAfterCompression = getBase64ByteSize(compressedDataUrl);
+                        const rawDataUrl = await fileToBase64(newFabricImageFile);
+                        const sizeInBytes = getBase64ByteSize(rawDataUrl);
 
-                        if (sizeAfterCompression > MAX_FILE_SIZE_BYTES) {
-                            setError(`Even after compression, the image is too large (${(sizeAfterCompression / 1024).toFixed(0)}KB). Please use a smaller source image.`);
+                        if (sizeInBytes > MAX_FILE_SIZE_BYTES) {
+                            setError(`Image is too large (${(sizeInBytes / 1024).toFixed(0)}KB). The limit is 750 KB.`);
                             setIsUploading(false);
                             return;
                         }
 
-                        imageUrlToStore = compressedDataUrl;
+                        imageUrlToStore = rawDataUrl;
                     } catch (error) {
-                        console.error("Error processing or compressing image:", error);
-                        setError("Failed to process image file. The file may be corrupt or too large, even for compression.");
+                        console.error("Error processing image:", error);
+                        setError("Failed to process image file. The file may be corrupt or too large.");
                         setIsUploading(false);
                         return;
                     }
@@ -612,7 +568,7 @@
 
                                     {newFabricImageFile && <p className="mt-1 text-xs text-green-600">File selected: {newFabricImageFile.name}</p>}
                                     <p className="mt-1 text-xs text-gray-500 font-semibold text-red-600">
-                                        Image is automatically compressed to fit the 750 KB storage limit.
+                                        Image size must be less than 750 KB.
                                     </p>
                                 </div>
 
@@ -625,7 +581,7 @@
                                     >
                                         {isUploading ? (
                                             <>
-                                                <span className="spinner mr-2"></span> Compressing and Saving...
+                                                <span className="spinner mr-2"></span> Uploading...
                                             </>
                                         ) : (
                                             <>
