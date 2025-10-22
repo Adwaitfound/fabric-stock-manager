@@ -162,6 +162,7 @@
             const [db, setDb] = useState(null);
             const [auth, setAuth] = useState(null); // Store auth instance
             const [userId, setUserId] = useState(null);
+            const [userEmail, setUserEmail] = useState(null); // <-- NEW: Store user email
             const [fabrics, setFabrics] = useState([]);
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
@@ -203,9 +204,11 @@
                         onAuthStateChanged(firebaseAuth, (user) => {
                             if (user) {
                                 setUserId(user.uid);
+                                setUserEmail(user.email); // <-- NEW: Capture user email
                                 setError(null); // Clear errors on successful sign-in
                             } else {
                                 setUserId(null); // User is logged out
+                                setUserEmail(null); // <-- NEW: Clear user email
                             }
                             setLoading(false);
                         });
@@ -258,6 +261,7 @@
                 try {
                     await auth.signOut();
                     setUserId(null); // Force log out
+                    setUserEmail(null); // <-- NEW: Clear email on sign out
                     setFabrics([]); // Clear the data
                     setError(null);
                 } catch (e) {
@@ -365,6 +369,8 @@
                     lengthRequiredPerOutfit: parseFloat(lengthRequiredPerOutfit),
                     imageUrl: imageUrlToStore, // Store Base64 data
                     createdAt: serverTimestamp(),
+                    updatedByEmail: userEmail, // <-- NEW: Tracking
+                    updatedAt: serverTimestamp(), // <-- NEW: Tracking
                 };
 
                 try {
@@ -421,7 +427,11 @@
                     // Using PUBLIC PATH
                     const docRef = doc(db, `artifacts/${APP_ID}/public/data/poshakh_fabric_measure`, updateFabricId);
                     // Use setDoc with merge: true to update only the currentLength field
-                    await setDoc(docRef, { currentLength: newCurrentLength }, { merge: true });
+                    await setDoc(docRef, {
+                        currentLength: newCurrentLength,
+                        updatedByEmail: userEmail, // <-- NEW: Tracking
+                        updatedAt: serverTimestamp(), // <-- NEW: Tracking
+                    }, { merge: true });
 
                     setUpdateFabricId(null);
                     setUpdateAmountUsed('');
@@ -498,6 +508,11 @@
                         <p className="text-sm text-gray-500 mb-6 flex justify-between items-center">
                             Storage Mode: **SHARED (Firebase)** | User ID:
                             <span className="font-mono bg-gray-200 p-1 rounded-md text-xs">{userId}</span>
+                            {userEmail && (
+                                <span className="ml-4">Email:
+                                    <span className="font-mono bg-gray-200 p-1 rounded-md text-xs ml-1">{userEmail}</span>
+                                </span>
+                            )}
                         </p>
                         <p className="text-sm text-green-700 mb-6 bg-green-100 p-2 rounded-lg border border-green-300 font-semibold">
                             <span className="font-bold">Team Sharing Active:</span> Data is now saved and synchronized in real-time on your Firebase project.
@@ -645,6 +660,14 @@
                                                     <p className="flex items-center"><Ruler className="w-4 h-4 mr-2 text-blue-500" /> Total Length: {fabric.totalLength.toFixed(2)} {fabric.unit}</p>
                                                     <p className="flex items-center"><Shirt className="w-4 h-4 mr-2 text-green-500" /> Req. per Outfit: {fabric.lengthRequiredPerOutfit.toFixed(2)} {fabric.unit}</p>
                                                 </div>
+                                                {/* NEW: Last Updated By/Time */}
+                                                <p className="text-xs text-gray-400 mt-2">
+                                                    Last updated by:
+                                                    <span className="font-semibold text-gray-600 ml-1">{fabric.updatedByEmail || 'System'}</span>
+                                                    {fabric.updatedAt && (
+                                                        <span className="ml-2">({fabric.updatedAt.toDate ? new Date(fabric.updatedAt.toDate()).toLocaleTimeString() : 'N/A'})</span>
+                                                    )}
+                                                </p>
                                             </div>
                                         </div>
 
